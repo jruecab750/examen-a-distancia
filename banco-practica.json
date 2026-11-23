@@ -1,0 +1,11 @@
+{
+  "examId": "PRACTICA-CULTURA-GENERAL",
+  "titulo": "Examen de práctica · 3 preguntas",
+  "duracionMin": 10,
+  "aleatorio": true,
+  "preguntas": [
+    {"id": "P01", "tipo": "test", "enun": "¿Cuál es el número de teléfono único de emergencias en la Unión Europea?", "op": ["091", "061", "112", "080"], "ok": 2},
+    {"id": "P02", "tipo": "test", "enun": "¿Cuántas provincias tiene Andalucía?", "op": ["6", "7", "8", "9"], "ok": 2},
+    {"id": "C01", "tipo": "corta", "enun": "Explica en dos o tres líneas qué harías en los primeros minutos si detectas humo en un aula.", "max": 2}
+  ]
+}

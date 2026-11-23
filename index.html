@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Examen a distancia</title>
+<style>
+  :root{
+    --bg:#f4f6f9; --card:#fff; --txt:#1d2733; --muted:#5b6878; --pri:#1f5fa8; --pri2:#174a83;
+    --ok:#1e8a4c; --warn:#c77700; --bad:#c0392b; --line:#d7dde5; --sel:#e3eefb;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--txt);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  body.examen{user-select:none;-webkit-user-select:none}
+  button{font:inherit;min-height:44px;min-width:44px;cursor:pointer;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--txt);padding:8px 16px}
+  button.pri{background:var(--pri);border-color:var(--pri);color:#fff;font-weight:600}
+  button.pri:hover{background:var(--pri2)}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  input,select,textarea{font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:10px;width:100%;background:#fff;color:var(--txt)}
+  label{font-weight:600;display:block;margin:12px 0 4px}
+  .oculto{display:none!important}
+  .tarjeta{background:var(--card);border-radius:16px;box-shadow:0 2px 12px rgba(0,0,0,.06);padding:24px;max-width:860px;margin:24px auto}
+  h1{font-size:1.5rem;margin:0 0 4px}
+  h2{font-size:1.15rem;margin:18px 0 6px}
+  .sub{color:var(--muted);margin:0 0 12px}
+  .rejilla2{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
+  @media (max-width:640px){.rejilla2{grid-template-columns:1fr}}
+  .aviso{background:#fff7e6;border:1px solid #f0c36d;border-radius:12px;padding:14px 16px;margin:16px 0}
+  .aviso ul{margin:6px 0 0 18px;padding:0}
+  .consent{display:flex;gap:10px;align-items:flex-start;margin:12px 0;font-weight:500}
+  .consent input{width:24px;height:24px;flex:0 0 24px;margin-top:2px}
+  .error{color:var(--bad);font-weight:600;min-height:1.4em}
+  .modo{display:inline-block;padding:3px 10px;border-radius:99px;font-size:.85rem;font-weight:700}
+  .modo.practica{background:#e6f4ea;color:var(--ok)}
+  .modo.examen{background:#fde8e6;color:var(--bad)}
+
+  /* Barra superior del examen */
+  #barra{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;padding:8px 16px;flex-wrap:wrap}
+  #barra .nombre{font-weight:600}
+  #barra .esp{flex:1}
+  #reloj{font-variant-numeric:tabular-nums;font-weight:800;font-size:1.3rem;padding:4px 12px;border-radius:10px;background:#eef3f9}
+  #reloj.aviso10{background:#fff1d6;color:var(--warn)}
+  #reloj.aviso5{background:#fde2df;color:var(--bad)}
+  #estadoCam{font-size:.85rem;color:var(--muted)}
+  #estadoCam.mal{color:var(--bad);font-weight:700}
+  /* Recuadro de cámara: siempre visible, para que el alumnado sepa que se le graba */
+  #camBox{position:fixed;right:16px;bottom:16px;width:280px;z-index:6;background:#111;border:4px solid var(--bad);border-radius:14px;overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,.3)}
+  #camBox video{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;transform:scaleX(-1);background:#000}
+  #camBox .rec{position:absolute;top:8px;left:8px;background:rgba(192,57,43,.95);color:#fff;font-weight:800;font-size:.85rem;letter-spacing:.06em;padding:4px 10px;border-radius:99px;display:flex;align-items:center;gap:6px}
+  #camBox .rec::before{content:"";width:10px;height:10px;border-radius:50%;background:#fff;animation:parpadeo 1s infinite}
+  @keyframes parpadeo{50%{opacity:.15}}
+  #camBox .pie{background:var(--bad);color:#fff;font-size:.8rem;font-weight:600;text-align:center;padding:6px 8px;line-height:1.3}
+  #camBox.mal{border-color:#ff9f1a}
+  #camBox.mal .pie{background:#ff9f1a;color:#1d2733}
+  @media (max-width:900px){#camBox{width:200px}}
+
+  #zona{max-width:900px;margin:16px auto;padding:0 16px 260px}
+  .pregunta{background:#fff;border-radius:16px;box-shadow:0 2px 12px rgba(0,0,0,.06);padding:22px}
+  .num{color:var(--muted);font-weight:700;margin-bottom:6px}
+  .enun{font-size:1.15rem;font-weight:600;margin-bottom:14px}
+  .op{display:flex;gap:12px;align-items:center;width:100%;text-align:left;margin:8px 0;padding:12px 14px;border-radius:12px}
+  .op .letra{flex:0 0 36px;height:36px;border-radius:50%;display:grid;place-items:center;background:#eef3f9;font-weight:800}
+  .op.sel{background:var(--sel);border-color:var(--pri)}
+  .op.sel .letra{background:var(--pri);color:#fff}
+  .op:hover{border-color:var(--pri)}
+  textarea{min-height:140px;resize:vertical;user-select:text}
+  .nav{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+  .nav .esp{flex:1}
+  .pista{color:var(--muted);font-size:.9rem;margin-top:10px}
+  #paleta{display:grid;grid-template-columns:repeat(auto-fill,minmax(44px,1fr));gap:6px;margin-top:18px}
+  #paleta button{padding:0;font-size:.85rem}
+  #paleta .resp{background:#dff0e5;border-color:#9fd1b1}
+  #paleta .rev{outline:3px solid var(--warn)}
+  #paleta .actual{background:var(--pri);color:#fff;border-color:var(--pri)}
+
+  /* Capa de bloqueo */
+  #bloqueo,#modal{position:fixed;inset:0;background:rgba(20,28,38,.92);z-index:20;display:grid;place-items:center;padding:20px}
+  #bloqueo .caja,#modal .caja{background:#fff;border-radius:16px;padding:26px;max-width:520px;text-align:center}
+  #bloqueo h2{color:var(--bad);margin-top:0}
+  #alertaCara{position:fixed;left:50%;transform:translateX(-50%);top:70px;z-index:7;background:var(--bad);color:#fff;padding:10px 18px;border-radius:12px;font-weight:700;box-shadow:0 4px 18px rgba(0,0,0,.2)}
+  .fin-ok{color:var(--ok);font-weight:700}
+  .fin-mal{color:var(--bad);font-weight:700}
+  img.captura{max-width:240px;border-radius:10px;border:1px solid var(--line)}
+</style>
+</head>
+<body>
+
+<!-- ============ PANTALLA 1: DATOS Y AVISO ============ -->
+<section id="pInicio" class="tarjeta">
+  <h1>Examen a distancia</h1>
+  <p class="sub"><span id="etiquetaModo" class="modo practica">MODO PRÁCTICA</span></p>
+
+  <div class="rejilla2">
+    <div><label for="fNombre">Nombre</label><input id="fNombre" autocomplete="given-name"></div>
+    <div><label for="fApellidos">Apellidos</label><input id="fApellidos" autocomplete="family-name"></div>
+    <div><label for="fCorreo">Correo de Educaand</label><input id="fCorreo" type="email" placeholder="usuario@g.educaand.es" autocomplete="email"></div>
+    <div><label for="fProvincia">Centro (provincia)</label>
+      <select id="fProvincia">
+        <option value="">— Elige —</option>
+        <option>Almería</option><option>Cádiz</option><option>Córdoba</option><option>Granada</option>
+        <option>Huelva</option><option>Jaén</option><option>Málaga</option><option>Sevilla</option>
+      </select>
+    </div>
+    <div id="cajaClave" class="oculto"><label for="fClave">Clave del examen (la da el profesorado)</label><input id="fClave" autocomplete="off"></div>
+  </div>
+
+  <div class="aviso">
+    <strong>⚠ AVISO IMPORTANTE ANTES DE EMPEZAR</strong>
+    <ul>
+      <li>Durante todo el examen la <strong>cámara estará activa</strong>. Al comenzar se toma <strong>una fotografía</strong> que se adjunta a tu examen para identificarte.</li>
+      <li>La página <strong>registra cada vez que sales de ella</strong>: cambio de pestaña o de ventana, salida de pantalla completa, intentos de copiar o pegar, y si no aparece tu cara o aparecen varias personas.</li>
+      <li>El examen se hace en <strong>pantalla completa</strong>. Si sales, las preguntas se ocultan hasta que vuelvas y queda anotado.</li>
+      <li>Ese registro se envía con tus respuestas al profesorado, que lo tendrá en cuenta al corregir.</li>
+      <li>Tus respuestas se guardan automáticamente. Si se cierra el navegador, vuelve a entrar con los mismos datos y continuarás; <strong>el tiempo sigue corriendo</strong>.</li>
+      <li>Responde con el <strong>ratón</strong> o con las teclas <strong>A, B, C, D</strong>. Cambia de pregunta con las flechas ← →.</li>
+    </ul>
+  </div>
+  <label class="consent"><input type="checkbox" id="fAcepto"> He leído el aviso y acepto realizar el examen con la cámara activa y con el registro de actividad descrito.</label>
+
+  <p id="errInicio" class="error"></p>
+  <button id="btnComenzar" class="pri">Comenzar el examen</button>
+  <p class="pista" id="infoBanco"></p>
+</section>
+
+<!-- ============ PANTALLA 2: EXAMEN ============ -->
+<section id="pExamen" class="oculto">
+  <div id="barra">
+    <span class="nombre" id="bNombre"></span>
+    <span class="modo" id="bModo"></span>
+    <span id="bProgreso"></span>
+    <span class="esp"></span>
+    <span id="estadoCam">Cámara: —</span>
+    <span id="reloj">--:--</span>
+    <button id="btnFinalizar" class="pri">Finalizar</button>
+  </div>
+  <div id="zona">
+    <div class="pregunta" id="tarjetaPregunta"></div>
+    <div id="paleta" aria-label="Lista de preguntas"></div>
+  </div>
+  <div id="alertaCara" class="oculto"></div>
+</section>
+
+<!-- ============ PANTALLA 3: FIN ============ -->
+<section id="pFin" class="tarjeta oculto">
+  <h1>Examen terminado</h1>
+  <p id="finResumen"></p>
+  <p id="finEnvio"></p>
+  <p>Se ha descargado una copia de tu examen: <strong id="finArchivo"></strong>. <strong>No la borres ni la modifiques.</strong> Si el envío automático ha fallado, entrégasela al profesorado.</p>
+  <button id="btnDescargarOtra">Descargar de nuevo la copia</button>
+  <button id="btnReintentar" class="oculto pri">Reintentar el envío</button>
+</section>
+
+<div id="camBox" class="oculto" aria-live="polite">
+  <video id="video" autoplay muted playsinline></video>
+  <span class="rec">GRABANDO</span>
+  <div class="pie" id="camPie">Cámara activa · se registra tu actividad durante todo el examen</div>
+</div>
+<canvas id="lienzo" width="320" height="240" class="oculto"></canvas>
+
+<div id="bloqueo" class="oculto"><div class="caja">
+  <h2 id="bloqueoTit">Has salido de la pantalla completa</h2>
+  <p id="bloqueoTxt">Las preguntas están ocultas y la salida ha quedado registrada. El tiempo sigue corriendo.</p>
+  <button class="pri" id="btnVolver">Volver al examen</button>
+</div></div>
+
+<div id="modal" class="oculto"><div class="caja">
+  <h2 id="modalTit"></h2>
+  <p id="modalTxt"></p>
+  <div class="nav" style="justify-content:center">
+    <button id="modalNo">Cancelar</button>
+    <button id="modalSi" class="pri">Sí</button>
+  </div>
+</div></div>
+
+<script type="module">
+/* =====================================================================
+   CONFIGURACIÓN — lo único que el profesorado tiene que tocar
+   ===================================================================== */
+const CONFIG = {
+  // URL de la aplicación web de Apps Script (termina en /exec). Vacía = solo descarga.
+  SCRIPT_URL: "",
+  // Banco de práctica (público, en el mismo repositorio de GitHub)
+  BANCO_PRACTICA: "banco-practica.json",
+  // Dominio obligatorio del correo (vacío = cualquiera)
+  DOMINIO_CORREO: "educaand.es",
+  // Cada cuántos segundos se envía el progreso parcial a Drive
+  ENVIO_PROGRESO_S: 60,
+  // Detección de cara: cada cuánto se comprueba y cuántos segundos seguidos sin cara cuentan como incidencia
+  CARA_INTERVALO_MS: 1000,
+  SIN_CARA_UMBRAL_S: 5,
+  VARIAS_CARAS_UMBRAL_S: 3,
+  // Capturas extra en incidencias de cara (0 = solo la captura inicial)
+  CAPTURAS_INCIDENCIA: 0,
+  VERSION: "1.0"
+};
+
+/* ---------- Modo: práctica (GitHub) o examen (banco en Drive) ---------- */
+const params = new URLSearchParams(location.search);
+const MODO = (params.get("modo") === "examen" && CONFIG.SCRIPT_URL) ? "examen" : "practica";
+const $ = id => document.getElementById(id);
+
+if (MODO === "examen") {
+  $("etiquetaModo").textContent = "EXAMEN OFICIAL";
+  $("etiquetaModo").className = "modo examen";
+  $("cajaClave").classList.remove("oculto");
+} else if (params.get("modo") === "examen") {
+  $("infoBanco").textContent = "Falta configurar la URL del script: se usa el banco de práctica.";
+}
+
+/* ---------- Utilidades ---------- */
+function cyrb53(str, seed = 0) {
+  let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
+  for (let i = 0; i < str.length; i++) { const ch = str.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return 4294967296 * (2097151 & h2) + (h1 >>> 0);
+}
+function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function barajar(arr, rnd) { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+const LETRAS = ["A", "B", "C", "D", "E", "F"];
+const ahoraISO = () => new Date().toISOString();
+function pad(n) { return String(n).padStart(2, "0"); }
+function limpiar(s) { return s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, ""); }
+async function sha256(txt) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(txt));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+/* ---------- Estado ---------- */
+let S = null;          // estado completo del examen (se guarda en localStorage)
+let banco = null;      // banco cargado (en modo examen, sin respuestas correctas)
+let claveLS = "";
+let detector = null, streamCam = null;
+let tReloj = null, tCara = null, tProgreso = null;
+let finalizando = false;
+let sinCaraSeg = 0, variasSeg = 0, episodioSinCara = null, episodioVarias = null;
+
+function seg() { return S ? Math.round((Date.now() - S.inicioMs) / 1000) : 0; }
+function log(tipo, det = "") {
+  if (!S || S.finalizado) return;
+  S.eventos.push({ ts: ahoraISO(), s: seg(), tipo, det: String(det).slice(0, 200) });
+  guardar();
+}
+function guardar() { try { localStorage.setItem(claveLS, JSON.stringify(S)); } catch (e) { /* almacenamiento lleno o bloqueado */ } }
+
+/* ---------- Modal propio (sin alert/confirm) ---------- */
+function preguntar(tit, txt, si = "Sí", no = "Cancelar") {
+  return new Promise(res => {
+    $("modalTit").textContent = tit; $("modalTxt").textContent = txt;
+    $("modalSi").textContent = si; $("modalNo").textContent = no;
+    $("modalNo").classList.toggle("oculto", !no);
+    $("modal").classList.remove("oculto");
+    const fin = v => { $("modal").classList.add("oculto"); $("modalSi").onclick = $("modalNo").onclick = null; res(v); };
+    $("modalSi").onclick = () => fin(true); $("modalNo").onclick = () => fin(false);
+  });
+}
+
+/* =====================================================================
+   INICIO
+   ===================================================================== */
+$("btnComenzar").addEventListener("click", comenzar);
+
+async function comenzar() {
+  const err = $("errInicio"); err.textContent = "";
+  const al = {
+    nombre: $("fNombre").value.trim(),
+    apellidos: $("fApellidos").value.trim(),
+    correo: $("fCorreo").value.trim().toLowerCase(),
+    provincia: $("fProvincia").value
+  };
+  if (!al.nombre || !al.apellidos) return err.textContent = "Escribe tu nombre y tus apellidos.";
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(al.correo)) return err.textContent = "Escribe un correo válido.";
+  if (CONFIG.DOMINIO_CORREO && !al.correo.endsWith(CONFIG.DOMINIO_CORREO)) return err.textContent = "Usa tu correo de Educaand (…" + CONFIG.DOMINIO_CORREO + ").";
+  if (!al.provincia) return err.textContent = "Elige el centro donde haces el examen.";
+  if (!$("fAcepto").checked) return err.textContent = "Debes aceptar el aviso para empezar.";
+  al.usuario = al.correo.split("@")[0];
+  $("btnComenzar").disabled = true; $("btnComenzar").textContent = "Preparando…";
+
+  try {
+    // 1) Pantalla completa (tiene que pedirse dentro del clic)
+    await entrarPantallaCompleta();
+
+    // 2) Banco de preguntas
+    banco = await cargarBanco(al);
+
+    // 3) Cámara
+    await activarCamara();
+
+    // 4) ¿Hay un examen a medias de esta persona?
+    claveLS = "examen_" + banco.examId + "_" + al.usuario;
+    const previo = JSON.parse(localStorage.getItem(claveLS) || "null");
+    if (previo && !previo.finalizado) {
+      S = previo;
+      log("reanudacion", "Vuelve a entrar con " + respondidas() + " respondidas");
+    } else if (previo && previo.finalizado) {
+      throw new Error("Este examen ya fue finalizado en este ordenador con ese correo.");
+    } else {
+      S = crearEstado(al);
+      log("inicio", navigator.userAgent);
+    }
+    guardar();
+
+    // 5) Captura inicial (y otra en cada reanudación)
+    await esperar(800);
+    capturar(S.eventos.some(e => e.tipo === "reanudacion") ? "reanudacion" : "inicio");
+
+    // 6) Detector de caras (si no carga, se registra y se sigue)
+    cargarDetector();
+
+    arrancarExamen();
+  } catch (e) {
+    err.textContent = e.message || String(e);
+    $("btnComenzar").disabled = false; $("btnComenzar").textContent = "Comenzar el examen";
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  }
+}
+
+const esperar = ms => new Promise(r => setTimeout(r, ms));
+
+async function entrarPantallaCompleta() {
+  try { await document.documentElement.requestFullscreen({ navigationUI: "hide" }); }
+  catch (e) { throw new Error("No se ha podido activar la pantalla completa. Usa Chrome, Edge o Firefox en un ordenador."); }
+}
+
+async function cargarBanco(al) {
+  if (MODO === "examen") {
+    const clave = $("fClave").value.trim();
+    if (!clave) throw new Error("Escribe la clave del examen.");
+    const url = CONFIG.SCRIPT_URL + "?accion=banco&clave=" + encodeURIComponent(clave) + "&correo=" + encodeURIComponent(al.correo);
+    let r;
+    try { r = await (await fetch(url)).json(); } catch (e) { throw new Error("No hay conexión con el servidor del examen. Avisa al profesorado."); }
+    if (!r.ok) throw new Error(r.error || "El servidor ha rechazado la petición.");
+    return r.banco;
+  }
+  try {
+    const r = await fetch(CONFIG.BANCO_PRACTICA, { cache: "no-store" });
+    return await r.json();
+  } catch (e) { throw new Error("No se ha podido cargar el banco de práctica (" + CONFIG.BANCO_PRACTICA + ")."); }
+}
+
+function crearEstado(al) {
+  const rnd = mulberry32(cyrb53(al.correo + "|" + banco.examId));
+  let test = banco.preguntas.filter(p => p.tipo !== "corta");
+  const cortas = banco.preguntas.filter(p => p.tipo === "corta");
+  if (banco.aleatorio !== false) test = barajar(test, rnd);
+  const orden = [...test, ...cortas].map(p => {
+    const idx = (p.op || []).map((_, i) => i);
+    return { id: p.id, ops: (p.tipo === "corta" || p.fijo || banco.aleatorio === false) ? idx : barajar(idx, rnd) };
+  });
+  const ini = Date.now();
+  return {
+    version: CONFIG.VERSION, modo: MODO, examId: banco.examId, titulo: banco.titulo,
+    alumno: al, inicioMs: ini, finMs: ini + banco.duracionMin * 60000, duracionMin: banco.duracionMin,
+    orden, respuestas: {}, revisar: {}, idx: 0, eventos: [], capturas: [], finalizado: false
+  };
+}
+
+/* =====================================================================
+   CÁMARA Y DETECCIÓN DE CARAS
+   ===================================================================== */
+async function activarCamara() {
+  try {
+    streamCam = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: "user" }, audio: false });
+  } catch (e) {
+    throw new Error("Sin cámara no se puede hacer el examen. Permite el acceso a la cámara en el candado de la barra de direcciones y vuelve a pulsar Comenzar.");
+  }
+  const v = $("video"); v.srcObject = streamCam; $("camBox").classList.remove("oculto");
+  await v.play().catch(() => {});
+  streamCam.getVideoTracks()[0].addEventListener("ended", () => {
+    log("camara_perdida", "La cámara se ha desconectado o se ha bloqueado");
+    estadoCam("SIN CÁMARA", true);
+    mostrarBloqueo("La cámara se ha desconectado", "Ha quedado registrado. Vuelve a conectarla o permite el acceso y pulsa Volver.", true);
+  });
+}
+
+function capturar(motivo) {
+  const v = $("video"), c = $("lienzo");
+  if (!v.videoWidth) return;
+  c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+  S.capturas.push({ ts: ahoraISO(), s: seg(), motivo, img: c.toDataURL("image/jpeg", 0.6) });
+  log("captura", motivo);
+}
+
+async function cargarDetector() {
+  try {
+    const vision = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14");
+    const files = await vision.FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
+    const opts = d => ({
+      baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite", delegate: d },
+      runningMode: "VIDEO", minDetectionConfidence: 0.5
+    });
+    try { detector = await vision.FaceDetector.createFromOptions(files, opts("GPU")); }
+    catch (e) { detector = await vision.FaceDetector.createFromOptions(files, opts("CPU")); }
+    log("detector_cara", "activo");
+    estadoCam("Cámara: OK", false);
+    tCara = setInterval(comprobarCara, CONFIG.CARA_INTERVALO_MS);
+  } catch (e) {
+    log("detector_cara", "NO disponible: " + (e.message || e));
+    estadoCam("Cámara: activa (sin detector)", false);
+  }
+}
+
+function comprobarCara() {
+  const v = $("video");
+  if (!detector || !v.videoWidth || S.finalizado) return;
+  let n = 0;
+  try { n = detector.detectForVideo(v, performance.now()).detections.length; } catch (e) { return; }
+  const pasos = CONFIG.CARA_INTERVALO_MS / 1000;
+
+  // Sin cara
+  if (n === 0) {
+    sinCaraSeg += pasos;
+    if (sinCaraSeg >= CONFIG.SIN_CARA_UMBRAL_S && !episodioSinCara) {
+      episodioSinCara = { s: seg() - Math.round(sinCaraSeg) };
+      log("sin_cara_inicio", "");
+      alertaCara("No se ve tu cara. Colócate frente a la cámara.");
+      if (S.capturas.length <= CONFIG.CAPTURAS_INCIDENCIA) capturar("sin_cara");
+    }
+  } else {
+    if (episodioSinCara) { log("sin_cara_fin", "duración " + (seg() - episodioSinCara.s) + " s"); episodioSinCara = null; alertaCara(""); }
+    sinCaraSeg = 0;
+  }
+  // Varias caras
+  if (n > 1) {
+    variasSeg += pasos;
+    if (variasSeg >= CONFIG.VARIAS_CARAS_UMBRAL_S && !episodioVarias) {
+      episodioVarias = { s: seg() };
+      log("varias_caras_inicio", n + " caras");
+      alertaCara("Se detecta más de una persona frente a la cámara.");
+      if (S.capturas.length <= CONFIG.CAPTURAS_INCIDENCIA) capturar("varias_caras");
+    }
+  } else {
+    if (episodioVarias) { log("varias_caras_fin", "duración " + (seg() - episodioVarias.s) + " s"); episodioVarias = null; if (!episodioSinCara) alertaCara(""); }
+    variasSeg = 0;
+  }
+  const mal = !!(episodioSinCara || episodioVarias);
+  $("camBox").classList.toggle("mal", mal);
+  $("camPie").textContent = mal ? (episodioVarias ? "Más de una persona detectada · queda registrado" : "No se ve tu cara · colócate frente a la cámara") : "Cámara activa · se registra tu actividad durante todo el examen";
+  estadoCam(mal ? "Cámara: INCIDENCIA" : "Cámara: OK", mal);
+}
+function alertaCara(t) { $("alertaCara").textContent = t; $("alertaCara").classList.toggle("oculto", !t); }
+function estadoCam(t, mal) { $("estadoCam").textContent = t; $("estadoCam").classList.toggle("mal", mal); }
+
+/* =====================================================================
+   EXAMEN
+   ===================================================================== */
+const porId = id => banco.preguntas.find(p => p.id === id);
+const respondidas = () => S ? Object.values(S.respuestas).filter(r => r.o !== undefined && r.o !== null || (r.texto && r.texto.trim())).length : 0;
+
+function arrancarExamen() {
+  document.body.classList.add("examen");
+  $("pInicio").classList.add("oculto");
+  $("pExamen").classList.remove("oculto");
+  $("bNombre").textContent = S.alumno.nombre + " " + S.alumno.apellidos;
+  $("bModo").textContent = MODO === "examen" ? "EXAMEN" : "PRÁCTICA";
+  $("bModo").className = "modo " + MODO;
+  activarVigilancia();
+  pintarPaleta(); pintarPregunta();
+  if (!document.fullscreenElement) mostrarBloqueo("Activa la pantalla completa", "El examen solo se muestra en pantalla completa. El tiempo ya está corriendo.");
+  tReloj = setInterval(reloj, 1000); reloj();
+  if (CONFIG.SCRIPT_URL) tProgreso = setInterval(() => enviar("progreso"), CONFIG.ENVIO_PROGRESO_S * 1000);
+}
+
+function pintarPregunta() {
+  const o = S.orden[S.idx], p = porId(o.id), r = S.respuestas[o.id] || {};
+  const t = $("tarjetaPregunta"); t.innerHTML = "";
+  const num = document.createElement("div"); num.className = "num";
+  num.textContent = "Pregunta " + (S.idx + 1) + " de " + S.orden.length + (p.tipo === "corta" ? " · respuesta corta" : "");
+  const en = document.createElement("div"); en.className = "enun"; en.textContent = p.enun;
+  t.append(num, en);
+
+  if (p.tipo === "corta") {
+    const ta = document.createElement("textarea");
+    ta.value = r.texto || ""; ta.placeholder = "Escribe aquí tu respuesta…"; ta.maxLength = 2000;
+    let tmo;
+    ta.addEventListener("input", () => {
+      const rr = S.respuestas[o.id] || (S.respuestas[o.id] = { n: 0 });
+      rr.texto = ta.value; rr.s = seg();
+      clearTimeout(tmo); tmo = setTimeout(() => { guardar(); pintarPaleta(); }, 600);
+    });
+    t.append(ta);
+    setTimeout(() => ta.focus(), 50);
+  } else {
+    o.ops.forEach((orig, i) => {
+      const b = document.createElement("button");
+      b.className = "op" + (r.o === orig ? " sel" : "");
+      const l = document.createElement("span"); l.className = "letra"; l.textContent = LETRAS[i];
+      const tx = document.createElement("span"); tx.textContent = p.op[orig];
+      b.append(l, tx);
+      b.addEventListener("click", () => responder(i));
+      t.append(b);
+    });
+  }
+  const nav = document.createElement("div"); nav.className = "nav";
+  const ant = boton("← Anterior", () => ir(S.idx - 1)); ant.disabled = S.idx === 0;
+  const rev = boton(S.revisar[o.id] ? "★ Quitar marca" : "☆ Marcar para revisar", () => { S.revisar[o.id] = !S.revisar[o.id]; guardar(); pintarPaleta(); pintarPregunta(); });
+  const borrar = boton("Dejar en blanco", () => { if (S.respuestas[o.id]) { S.respuestas[o.id].o = null; S.respuestas[o.id].l = null; S.respuestas[o.id].texto = ""; S.respuestas[o.id].n++; } guardar(); pintarPaleta(); pintarPregunta(); });
+  const esp = document.createElement("span"); esp.className = "esp";
+  const sig = boton("Siguiente →", () => ir(S.idx + 1)); sig.className = "pri"; sig.disabled = S.idx === S.orden.length - 1;
+  nav.append(ant, rev, borrar, esp, sig);
+  const pista = document.createElement("div"); pista.className = "pista";
+  pista.textContent = p.tipo === "corta" ? "Las flechas no cambian de pregunta mientras escribes: usa los botones." : "Teclas: A B C D para responder · ← → para moverte.";
+  t.append(nav, pista);
+  $("bProgreso").textContent = respondidas() + "/" + S.orden.length + " respondidas";
+}
+function boton(txt, fn) { const b = document.createElement("button"); b.textContent = txt; b.addEventListener("click", fn); return b; }
+
+function responder(i) {
+  const o = S.orden[S.idx], p = porId(o.id);
+  if (p.tipo === "corta" || i >= o.ops.length) return;
+  const rr = S.respuestas[o.id] || (S.respuestas[o.id] = { n: 0 });
+  if (rr.o !== undefined && rr.o !== null && rr.o !== o.ops[i]) rr.n++;
+  rr.o = o.ops[i]; rr.l = LETRAS[i]; rr.s = seg();
+  guardar(); pintarPaleta(); pintarPregunta();
+}
+function ir(i) { if (i < 0 || i >= S.orden.length) return; S.idx = i; guardar(); pintarPaleta(); pintarPregunta(); window.scrollTo(0, 0); }
+
+function pintarPaleta() {
+  const pal = $("paleta"); pal.innerHTML = "";
+  S.orden.forEach((o, i) => {
+    const r = S.respuestas[o.id];
+    const b = document.createElement("button"); b.textContent = i + 1;
+    if (r && ((r.o !== undefined && r.o !== null) || (r.texto && r.texto.trim()))) b.classList.add("resp");
+    if (S.revisar[o.id]) b.classList.add("rev");
+    if (i === S.idx) b.classList.add("actual");
+    b.addEventListener("click", () => ir(i));
+    pal.append(b);
+  });
+}
+
+function reloj() {
+  const rest = Math.max(0, Math.round((S.finMs - Date.now()) / 1000));
+  const r = $("reloj");
+  r.textContent = pad(Math.floor(rest / 60)) + ":" + pad(rest % 60);
+  r.classList.toggle("aviso10", rest <= 600 && rest > 300);
+  r.classList.toggle("aviso5", rest <= 300);
+  if (rest === 0) finalizar("tiempo agotado");
+}
+
+/* =====================================================================
+   VIGILANCIA DEL NAVEGADOR
+   ===================================================================== */
+function activarVigilancia() {
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) { log("pestana_oculta", "Ha cambiado de pestaña, minimizado o bloqueado la pantalla"); }
+    else { log("pestana_visible", ""); }
+  });
+  window.addEventListener("blur", () => { if (!document.hidden) log("ventana_sin_foco", "Ha pulsado fuera de la ventana del examen"); });
+  window.addEventListener("focus", () => log("ventana_con_foco", ""));
+  document.addEventListener("fullscreenchange", () => {
+    if (!document.fullscreenElement && !S.finalizado) {
+      log("salida_pantalla_completa", "");
+      mostrarBloqueo("Has salido de la pantalla completa", "Las preguntas están ocultas y la salida ha quedado registrada. El tiempo sigue corriendo.");
+    } else if (document.fullscreenElement) { log("vuelta_pantalla_completa", ""); }
+  });
+  ["copy", "cut", "paste"].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); log("intento_" + ev, ""); }));
+  document.addEventListener("contextmenu", e => { e.preventDefault(); log("clic_derecho", ""); });
+  document.addEventListener("dragstart", e => e.preventDefault());
+  window.addEventListener("beforeunload", e => { if (!S.finalizado) { log("intento_salir_pagina", ""); e.preventDefault(); e.returnValue = ""; } });
+  window.addEventListener("offline", () => log("sin_conexion", ""));
+  window.addEventListener("online", () => log("con_conexion", ""));
+  let anchoPrev = innerWidth;
+  window.addEventListener("resize", () => { if (Math.abs(innerWidth - anchoPrev) > 100) { log("cambio_tamano_ventana", innerWidth + "x" + innerHeight); anchoPrev = innerWidth; } });
+
+  document.addEventListener("keydown", e => {
+    if (S.finalizado || !$("modal").classList.contains("oculto")) return;
+    const k = e.key, ctrl = e.ctrlKey || e.metaKey;
+    if (k === "F12" || k === "PrintScreen" || (ctrl && ["c", "v", "x", "p", "s", "u", "f", "t", "n", "w"].includes(k.toLowerCase())) || (ctrl && e.shiftKey && ["i", "j", "c"].includes(k.toLowerCase()))) {
+      e.preventDefault(); log("atajo_bloqueado", (ctrl ? "Ctrl+" : "") + (e.shiftKey ? "Mayús+" : "") + k); return;
+    }
+    if (e.altKey && k === "Tab") log("atajo_bloqueado", "Alt+Tab");
+    if (!$("bloqueo").classList.contains("oculto")) return;
+    if (e.target.tagName === "TEXTAREA") return;
+    const i = LETRAS.slice(0, 4).indexOf(k.toUpperCase());
+    if (i >= 0 && !ctrl && !e.altKey) { e.preventDefault(); responder(i); }
+    else if (k === "ArrowRight") { e.preventDefault(); ir(S.idx + 1); }
+    else if (k === "ArrowLeft") { e.preventDefault(); ir(S.idx - 1); }
+  });
+}
+
+function mostrarBloqueo(tit, txt, camara = false) {
+  $("bloqueoTit").textContent = tit; $("bloqueoTxt").textContent = txt;
+  $("bloqueo").classList.remove("oculto");
+  $("btnVolver").onclick = async () => {
+    try {
+      if (camara) { await activarCamara(); log("camara_recuperada", ""); estadoCam("Cámara: OK", false); }
+      if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+      $("bloqueo").classList.add("oculto");
+    } catch (e) { $("bloqueoTxt").textContent = "No se ha podido recuperar: " + (e.message || e) + ". Inténtalo de nuevo."; }
+  };
+}
+
+/* =====================================================================
+   FINALIZAR, REGISTRO JSON Y ENVÍO
+   ===================================================================== */
+$("btnFinalizar").addEventListener("click", async () => {
+  const faltan = S.orden.length - respondidas();
+  const ok = await preguntar("¿Finalizar el examen?", faltan ? "Te quedan " + faltan + " preguntas sin responder. Una vez finalizado no podrás cambiar nada." : "Has respondido todas las preguntas. Una vez finalizado no podrás cambiar nada.", "Sí, finalizar", "Seguir con el examen");
+  if (ok) finalizar("entregado por el alumno");
+});
+
+function resumen() {
+  const c = t => S.eventos.filter(e => e.tipo === t).length;
+  let segSinCara = 0;
+  S.eventos.filter(e => e.tipo === "sin_cara_fin").forEach(e => { segSinCara += parseInt((e.det.match(/\d+/) || [0])[0], 10); });
+  return {
+    respondidas: respondidas(), total: S.orden.length,
+    cambiosPestana: c("pestana_oculta"), ventanaSinFoco: c("ventana_sin_foco"),
+    salidasPantallaCompleta: c("salida_pantalla_completa"),
+    episodiosSinCara: c("sin_cara_inicio"), segundosSinCara: segSinCara,
+    episodiosVariasCaras: c("varias_caras_inicio"),
+    intentosCopiarPegar: c("intento_copy") + c("intento_cut") + c("intento_paste"),
+    atajosBloqueados: c("atajo_bloqueado"), clicDerecho: c("clic_derecho"),
+    reanudaciones: c("reanudacion"), camaraPerdida: c("camara_perdida"),
+    detectorCara: (S.eventos.find(e => e.tipo === "detector_cara") || {}).det || "desconocido"
+  };
+}
+
+function nombreArchivo() {
+  const d = new Date(S.inicioMs);
+  const f = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + "_" + pad(d.getHours()) + pad(d.getMinutes());
+  return (MODO === "examen" ? "" : "PRACTICA_") + f + "_" + limpiar(S.alumno.apellidos + " " + S.alumno.nombre) + "_" + limpiar(S.alumno.usuario) + ".json";
+}
+
+async function construirRegistro(estado) {
+  const reg = {
+    version: S.version, modo: S.modo, examId: S.examId, titulo: S.titulo, estado,
+    alumno: S.alumno,
+    inicio: new Date(S.inicioMs).toISOString(), finPrevisto: new Date(S.finMs).toISOString(),
+    entrega: estado === "final" ? ahoraISO() : null, motivoFin: S.motivoFin || null,
+    duracionMin: S.duracionMin,
+    equipo: { navegador: navigator.userAgent, pantalla: screen.width + "x" + screen.height, idioma: navigator.language },
+    orden: S.orden, respuestas: S.respuestas, revisar: S.revisar,
+    resumen: resumen(), eventos: S.eventos, capturas: S.capturas
+  };
+  reg.hash = await sha256(JSON.stringify(reg));
+  return reg;
+}
+
+let ultimoRegistro = null;
+async function enviar(estado) {
+  if (!CONFIG.SCRIPT_URL || !S) return false;
+  try {
+    const reg = await construirRegistro(estado);
+    if (estado === "final") ultimoRegistro = reg;
+    const r = await fetch(CONFIG.SCRIPT_URL, {
+      method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ accion: "guardar", estado, modo: MODO, archivo: nombreArchivo(), registro: reg })
+    });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || "rechazado");
+    if (estado === "progreso") log("progreso_enviado", "");
+    return true;
+  } catch (e) {
+    if (estado === "progreso") log("progreso_no_enviado", e.message || e);
+    return false;
+  }
+}
+
+function descargar(reg) {
+  const blob = new Blob([JSON.stringify(reg, null, 1)], { type: "application/json" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = nombreArchivo();
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+async function finalizar(motivo) {
+  if (finalizando || S.finalizado) return;
+  finalizando = true;
+  log("fin", motivo);
+  S.motivoFin = motivo;
+  clearInterval(tReloj); clearInterval(tCara); clearInterval(tProgreso);
+  if (episodioSinCara) log("sin_cara_fin", "duración " + (seg() - episodioSinCara.s) + " s");
+  if (episodioVarias) log("varias_caras_fin", "duración " + (seg() - episodioVarias.s) + " s");
+  S.finalizado = true; guardar();
+
+  const reg = await construirRegistro("final"); ultimoRegistro = reg;
+  descargar(reg);
+
+  if (streamCam) streamCam.getTracks().forEach(t => t.stop());
+  $("camBox").classList.add("oculto"); alertaCara("");
+  document.body.classList.remove("examen");
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  $("pExamen").classList.add("oculto"); $("bloqueo").classList.add("oculto"); $("pFin").classList.remove("oculto");
+  const rs = reg.resumen;
+  $("finResumen").textContent = "Motivo: " + motivo + ". Has respondido " + rs.respondidas + " de " + rs.total + " preguntas.";
+  $("finArchivo").textContent = nombreArchivo();
+  await intentarEnvioFinal();
+}
+
+async function intentarEnvioFinal() {
+  const p = $("finEnvio");
+  if (!CONFIG.SCRIPT_URL) { p.className = "fin-mal"; p.textContent = "Modo práctica sin servidor: el examen NO se ha enviado; solo se ha descargado."; return; }
+  p.className = ""; p.textContent = "Enviando al profesorado…";
+  for (let i = 0; i < 3; i++) {
+    if (await reenviarFinal()) { p.className = "fin-ok"; p.textContent = "✔ Examen enviado correctamente al profesorado."; $("btnReintentar").classList.add("oculto"); return; }
+    await esperar(2000 * (i + 1));
+  }
+  p.className = "fin-mal"; p.textContent = "✖ No se ha podido enviar. Pulsa «Reintentar el envío» o entrega el fichero descargado al profesorado.";
+  $("btnReintentar").classList.remove("oculto");
+}
+async function reenviarFinal() {
+  try {
+    const r = await fetch(CONFIG.SCRIPT_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ accion: "guardar", estado: "final", modo: MODO, archivo: nombreArchivo(), registro: ultimoRegistro }) });
+    return (await r.json()).ok === true;
+  } catch (e) { return false; }
+}
+$("btnReintentar").addEventListener("click", intentarEnvioFinal);
+$("btnDescargarOtra").addEventListener("click", () => ultimoRegistro && descargar(ultimoRegistro));
+</script>
+</body>
+</html>

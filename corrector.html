@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Corrector · Examen a distancia</title>
+<style>
+  :root{--bg:#f4f6f9;--txt:#1d2733;--muted:#5b6878;--pri:#1f5fa8;--ok:#1e8a4c;--warn:#c77700;--bad:#c0392b;--line:#d7dde5}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  header{background:#fff;border-bottom:1px solid var(--line);padding:16px 20px}
+  h1{margin:0;font-size:1.35rem}
+  main{padding:16px 20px;max-width:1400px;margin:auto}
+  .panel{background:#fff;border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,.05);padding:16px;margin-bottom:16px}
+  .fila{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end}
+  label{font-weight:600;display:block;margin-bottom:4px}
+  input[type=number]{width:90px}
+  input,button{font:inherit;padding:8px 12px;border-radius:9px;border:1px solid var(--line);min-height:44px}
+  button{cursor:pointer;background:#fff}
+  button.pri{background:var(--pri);color:#fff;border-color:var(--pri);font-weight:600}
+  .muted{color:var(--muted)}
+  table{border-collapse:collapse;width:100%;font-size:.9rem}
+  th,td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top}
+  th{background:#eef3f9;position:sticky;top:0;cursor:pointer;white-space:nowrap}
+  tr.alum:hover{background:#f6f9fd;cursor:pointer}
+  .num{text-align:right;font-variant-numeric:tabular-nums}
+  .alto{color:var(--bad);font-weight:700}
+  .medio{color:var(--warn);font-weight:700}
+  .bien{color:var(--ok);font-weight:700}
+  .chip{display:inline-block;padding:1px 8px;border-radius:99px;font-size:.8rem;font-weight:700}
+  .chip.r{background:#fde2df;color:var(--bad)} .chip.a{background:#fff1d6;color:var(--warn)} .chip.v{background:#dff0e5;color:var(--ok)}
+  #detalle h2{margin-top:0}
+  .grid2{display:grid;grid-template-columns:260px 1fr;gap:16px}
+  @media(max-width:800px){.grid2{grid-template-columns:1fr}}
+  img.cap{max-width:240px;border-radius:10px;border:1px solid var(--line);display:block;margin-bottom:6px}
+  .ev{font-family:ui-monospace,Consolas,monospace;font-size:.82rem;max-height:340px;overflow:auto;background:#f7f9fb;border-radius:8px;padding:8px}
+  .ev .inc{color:var(--bad);font-weight:700}
+  .corta{border:1px solid var(--line);border-radius:10px;padding:10px;margin:8px 0}
+  .corta .txt{white-space:pre-wrap;background:#f7f9fb;border-radius:8px;padding:8px;margin:6px 0}
+  .oculto{display:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>Corrector · Examen a distancia</h1>
+  <div class="muted">Todo se procesa en este ordenador: los ficheros no se suben a ningún sitio.</div>
+</header>
+<main>
+  <section class="panel">
+    <div class="fila">
+      <div><label>1. Banco con soluciones (JSON)</label><input type="file" id="fBanco" accept=".json,application/json"></div>
+      <div><label>2. Exámenes del alumnado (puedes elegir muchos)</label><input type="file" id="fExamenes" accept=".json,application/json" multiple></div>
+      <div><label>Penalización por error</label><input type="number" id="pen" value="0" step="0.05" min="0" max="1"></div>
+      <div><button class="pri" id="btnCSV">Exportar CSV (Excel)</button></div>
+    </div>
+    <p class="muted" id="estado">Carga primero el banco (el mismo JSON que subiste a Drive, con el campo «ok») y después los exámenes.
+      Nota sobre 10 = (aciertos − penalización × errores + puntos de respuestas cortas) ÷ (nº de preguntas test + máximo de cortas) × 10.</p>
+  </section>
+
+  <section class="panel">
+    <table id="tabla"><thead></thead><tbody></tbody></table>
+  </section>
+
+  <section class="panel oculto" id="detalle"></section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+let banco = null, examenes = [], manual = {}, ordenCol = "apellidos", ordenAsc = true;
+
+async function sha256(txt) {
+  const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(txt));
+  return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, "0")).join("");
+}
+const leer = f => new Promise((ok, ko) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = ko; r.readAsText(f); });
+
+$("fBanco").addEventListener("change", async e => {
+  try {
+    banco = JSON.parse(await leer(e.target.files[0]));
+    if (!banco.preguntas || !banco.preguntas.some(p => p.ok !== undefined)) throw new Error("Este JSON no trae las soluciones (campo «ok»).");
+    $("estado").textContent = "Banco cargado: " + banco.titulo + " · " + banco.preguntas.length + " preguntas.";
+    recalcular();
+  } catch (err) { banco = null; $("estado").textContent = "✖ " + err.message; }
+});
+
+$("fExamenes").addEventListener("change", async e => {
+  const nuevos = [];
+  for (const f of e.target.files) {
+    try {
+      const reg = JSON.parse(await leer(f));
+      const h = reg.hash; const copia = Object.assign({}, reg); delete copia.hash;
+      reg._hashOk = h && (await sha256(JSON.stringify(copia))) === h;
+      reg._archivo = f.name;
+      nuevos.push(reg);
+    } catch (err) { console.warn("No se pudo leer", f.name, err); }
+  }
+  // Si hay varios del mismo alumno, se conserva el final o el más reciente
+  const mapa = {};
+  [...examenes, ...nuevos].forEach(r => {
+    const k = r.alumno.correo + "|" + r.examId;
+    const prev = mapa[k];
+    const peso = x => (x.estado === "final" ? 1e15 : 0) + Date.parse(x.entrega || x.inicio);
+    if (!prev || peso(r) > peso(prev)) mapa[k] = r;
+  });
+  examenes = Object.values(mapa);
+  recalcular();
+});
+$("pen").addEventListener("input", recalcular);
+
+function corregir(reg) {
+  const out = { aciertos: 0, errores: 0, blancas: 0, nTest: 0, maxCortas: 0, puntosCortas: 0, cortasPendientes: 0, otroExamen: false };
+  if (!banco) return out;
+  if (banco.examId !== reg.examId) out.otroExamen = true;
+  banco.preguntas.forEach(p => {
+    const r = (reg.respuestas || {})[p.id];
+    if (p.tipo === "corta") {
+      out.maxCortas += p.max || 1;
+      const m = (manual[reg.alumno.correo] || {})[p.id];
+      if (m === undefined || m === "") { if (r && r.texto && r.texto.trim()) out.cortasPendientes++; }
+      else out.puntosCortas += Number(m);
+    } else {
+      out.nTest++;
+      if (!r || r.o === undefined || r.o === null) out.blancas++;
+      else if (r.o === p.ok) out.aciertos++;
+      else out.errores++;
+    }
+  });
+  const pen = Number($("pen").value) || 0;
+  const total = out.nTest + out.maxCortas;
+  out.nota = total ? Math.max(0, (out.aciertos - pen * out.errores + out.puntosCortas) / total * 10) : 0;
+  return out;
+}
+
+function nivel(rs) {
+  const g = (rs.cambiosPestana || 0) + (rs.salidasPantallaCompleta || 0) + (rs.episodiosVariasCaras || 0) * 2 + (rs.intentosCopiarPegar || 0) + (rs.camaraPerdida || 0) * 2;
+  const s = (rs.episodiosSinCara || 0) + (rs.ventanaSinFoco || 0);
+  if (g >= 3 || (rs.segundosSinCara || 0) > 120) return ["r", "ALTO"];
+  if (g >= 1 || s >= 3) return ["a", "REVISAR"];
+  return ["v", "OK"];
+}
+
+const COLS = [
+  ["apellidos", "Apellidos y nombre"], ["provincia", "Provincia"], ["estado", "Estado"],
+  ["aciertos", "Aciertos"], ["errores", "Errores"], ["blancas", "Blancas"], ["cortas", "Cortas"], ["nota", "Nota"],
+  ["nivel", "Alerta"], ["pestana", "Pestaña"], ["foco", "Sin foco"], ["fs", "Salidas p. compl."], ["sincara", "Sin cara (ep./s)"],
+  ["varias", "Varias caras"], ["copiar", "Copiar/pegar"], ["rean", "Reanud."], ["hash", "Integridad"]
+];
+
+function filas() {
+  return examenes.map(reg => {
+    const c = corregir(reg), rs = reg.resumen || {}, nv = nivel(rs);
+    return { reg, c, rs, nv,
+      apellidos: reg.alumno.apellidos + ", " + reg.alumno.nombre, provincia: reg.alumno.provincia || "", estado: reg.estado,
+      aciertos: c.aciertos, errores: c.errores, blancas: c.blancas,
+      cortas: c.maxCortas ? (c.puntosCortas + "/" + c.maxCortas + (c.cortasPendientes ? " (" + c.cortasPendientes + " pend.)" : "")) : "—",
+      nota: c.nota, nivel: nv[1], pestana: rs.cambiosPestana || 0, foco: rs.ventanaSinFoco || 0, fs: rs.salidasPantallaCompleta || 0,
+      sincara: (rs.episodiosSinCara || 0) + " / " + (rs.segundosSinCara || 0) + " s", varias: rs.episodiosVariasCaras || 0,
+      copiar: rs.intentosCopiarPegar || 0, rean: rs.reanudaciones || 0, hash: reg._hashOk ? "OK" : "MODIFICADO" };
+  });
+}
+
+function recalcular() {
+  const thead = $("tabla").tHead, tb = $("tabla").tBodies[0];
+  thead.innerHTML = "<tr>" + COLS.map(([k, t]) => `<th data-k="${k}">${t}${ordenCol === k ? (ordenAsc ? " ▲" : " ▼") : ""}</th>`).join("") + "</tr>";
+  thead.querySelectorAll("th").forEach(th => th.onclick = () => { const k = th.dataset.k; ordenAsc = ordenCol === k ? !ordenAsc : true; ordenCol = k; recalcular(); });
+  const fs = filas().sort((a, b) => { const x = a[ordenCol], y = b[ordenCol]; const r = typeof x === "number" ? x - y : String(x).localeCompare(String(y), "es"); return ordenAsc ? r : -r; });
+  tb.innerHTML = "";
+  fs.forEach(f => {
+    const tr = document.createElement("tr"); tr.className = "alum";
+    tr.innerHTML = COLS.map(([k]) => {
+      let v = f[k];
+      if (k === "nota") v = `<b>${v.toFixed(2)}</b>${f.c.otroExamen ? ' <span class="chip r">otro banco</span>' : ""}`;
+      else if (k === "nivel") v = `<span class="chip ${f.nv[0]}">${v}</span>`;
+      else if (k === "hash") v = f.reg._hashOk ? '<span class="bien">OK</span>' : '<span class="alto">MODIFICADO</span>';
+      else if (k === "estado") v = v === "final" ? "final" : '<span class="medio">' + v + ' (no entregado)</span>';
+      else v = escapar(String(v));
+      return `<td class="${typeof f[k] === "number" ? "num" : ""}">${v}</td>`;
+    }).join("");
+    tr.onclick = () => detalle(f);
+    tb.append(tr);
+  });
+  if (!examenes.length) tb.innerHTML = '<tr><td colspan="17" class="muted">Sin exámenes cargados.</td></tr>';
+}
+
+function escapar(s) { return s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+const INCID = ["pestana_oculta", "ventana_sin_foco", "salida_pantalla_completa", "sin_cara_inicio", "varias_caras_inicio", "intento_copy", "intento_cut", "intento_paste", "atajo_bloqueado", "clic_derecho", "camara_perdida", "reanudacion", "intento_salir_pagina"];
+
+function detalle(f) {
+  const reg = f.reg, d = $("detalle"); d.classList.remove("oculto");
+  const fmt = s => String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+  let html = `<h2>${escapar(f.apellidos)} · ${escapar(reg.alumno.correo)} · ${escapar(reg.alumno.provincia || "")}</h2>
+  <p class="muted">Archivo: ${escapar(reg._archivo)} · Inicio: ${new Date(reg.inicio).toLocaleString("es-ES")} · Entrega: ${reg.entrega ? new Date(reg.entrega).toLocaleString("es-ES") : "—"} · Motivo: ${escapar(reg.motivoFin || "—")}<br>
+  Detector de cara: ${escapar(f.rs.detectorCara || "—")} · Navegador: ${escapar(reg.equipo ? reg.equipo.navegador : "—")}</p>
+  <div class="grid2"><div>`;
+  (reg.capturas || []).forEach(c => { html += `<img class="cap" src="${c.img}" alt="Captura"><div class="muted">${escapar(c.motivo)} · min ${fmt(c.s)}</div>`; });
+  html += `</div><div><b>Registro de actividad</b> (minuto:segundo desde el inicio)<div class="ev">`;
+  (reg.eventos || []).forEach(e => { const inc = INCID.includes(e.tipo); html += `<div class="${inc ? "inc" : ""}">${fmt(e.s)} · ${escapar(e.tipo)} ${escapar(e.det || "")}</div>`; });
+  html += `</div></div></div>`;
+
+  if (banco) {
+    const cortas = banco.preguntas.filter(p => p.tipo === "corta");
+    if (cortas.length) {
+      html += `<h3>Respuestas cortas (puntúa aquí)</h3>`;
+      cortas.forEach(p => {
+        const r = (reg.respuestas || {})[p.id] || {};
+        const val = (manual[reg.alumno.correo] || {})[p.id] ?? "";
+        html += `<div class="corta"><b>${escapar(p.id)}.</b> ${escapar(p.enun)}${p.solucion ? `<div class="muted">Orientación: ${escapar(p.solucion)}</div>` : ""}
+          <div class="txt">${escapar(r.texto || "(en blanco)")}</div>
+          Puntos (máx. ${p.max || 1}): <input type="number" min="0" max="${p.max || 1}" step="0.25" value="${val}" data-p="${p.id}"></div>`;
+      });
+    }
+    html += `<h3>Preguntas de test</h3><table><tr><th>#</th><th>Pregunta</th><th>Respondió</th><th>Correcta</th><th>Cambios</th><th>Min.</th></tr>`;
+    banco.preguntas.filter(p => p.tipo !== "corta").forEach((p, i) => {
+      const r = (reg.respuestas || {})[p.id];
+      const resp = r && r.o !== undefined && r.o !== null ? p.op[r.o] : "—";
+      const cls = !r || r.o === undefined || r.o === null ? "muted" : (r.o === p.ok ? "bien" : "alto");
+      html += `<tr><td>${escapar(p.id)}</td><td>${escapar(p.enun)}</td><td class="${cls}">${escapar(String(resp))}</td><td>${escapar(p.op[p.ok])}</td><td class="num">${r ? r.n || 0 : ""}</td><td class="num">${r && r.s !== undefined ? fmt(r.s) : ""}</td></tr>`;
+    });
+    html += `</table>`;
+  }
+  d.innerHTML = html;
+  d.querySelectorAll("input[data-p]").forEach(inp => inp.addEventListener("input", () => {
+    (manual[reg.alumno.correo] = manual[reg.alumno.correo] || {})[inp.dataset.p] = inp.value;
+    recalcular();
+  }));
+  d.scrollIntoView({ behavior: "smooth" });
+}
+
+$("btnCSV").addEventListener("click", () => {
+  const cab = ["Apellidos", "Nombre", "Correo", "Provincia", "Estado", "Aciertos", "Errores", "Blancas", "Puntos cortas", "Máx cortas", "Nota", "Alerta",
+    "Cambios pestaña", "Sin foco", "Salidas pantalla completa", "Episodios sin cara", "Segundos sin cara", "Varias caras", "Copiar/pegar", "Atajos bloqueados", "Reanudaciones", "Integridad", "Archivo"];
+  const lineas = [cab];
+  filas().forEach(f => {
+    const r = f.reg, rs = f.rs;
+    lineas.push([r.alumno.apellidos, r.alumno.nombre, r.alumno.correo, r.alumno.provincia, r.estado, f.c.aciertos, f.c.errores, f.c.blancas,
+      f.c.puntosCortas, f.c.maxCortas, f.c.nota.toFixed(2).replace(".", ","), f.nv[1], rs.cambiosPestana || 0, rs.ventanaSinFoco || 0,
+      rs.salidasPantallaCompleta || 0, rs.episodiosSinCara || 0, rs.segundosSinCara || 0, rs.episodiosVariasCaras || 0,
+      rs.intentosCopiarPegar || 0, rs.atajosBloqueados || 0, rs.reanudaciones || 0, r._hashOk ? "OK" : "MODIFICADO", r._archivo]);
+  });
+  const csv = "﻿" + lineas.map(l => l.map(v => '"' + String(v ?? "").replace(/"/g, '""') + '"').join(";")).join("\r\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  a.download = "notas_" + (banco ? banco.examId : "examen") + ".csv"; a.click();
+});
+recalcular();
+</script>
+</body>
+</html>
